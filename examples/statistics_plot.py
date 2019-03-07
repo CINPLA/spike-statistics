@@ -6,6 +6,159 @@ import warnings
 from utils import simpleaxis
 
 
+def plot_raster(trials, color="#3498db", lw=1, ax=None, marker='.', marker_size=10,
+                ylabel='Trials', id_start=0, ylim=None):
+    """
+    Raster plot of trials
+    Parameters
+    ----------
+    trials : list of neo.SpikeTrains
+    color : color of spikes
+    lw : line width
+    ax : matplotlib axes
+    Returns
+    -------
+    out : axes
+    """
+    from matplotlib.ticker import MaxNLocator
+    if ax is None:
+        fig, ax = plt.subplots()
+    trial_id = []
+    spikes = []
+    dim = trials[0].times.dimensionality
+    for n, trial in enumerate(trials):  # TODO what about empty trials?
+        n += id_start
+        spikes.extend(trial.times.magnitude)
+        trial_id.extend([n]*len(trial.times))
+    if marker_size is None:
+        heights = 6000./len(trials)
+        if heights < 0.9:
+            heights = 1.  # min size
+    else:
+        heights = marker_size
+    ax.scatter(spikes, trial_id, marker=marker, s=heights, lw=lw, color=color,
+               edgecolors='face')
+    if ylim is None:
+        ax.set_ylim(-0.5, len(trials)-0.5)
+    elif ylim is True:
+        ax.set_ylim(ylim)
+    else:
+        pass
+    y_ax = ax.axes.get_yaxis()  # Get X axis
+    y_ax.set_major_locator(MaxNLocator(integer=True))
+    t_start = trials[0].t_start.rescale(dim)
+    t_stop = trials[0].t_stop.rescale(dim)
+    ax.set_xlim([t_start, t_stop])
+    ax.set_xlabel("Times [{}]".format(dim))
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    return ax
+
+
+def plot_psth(spike_train=None, epoch=None, trials=None, xlim=[None, None],
+              fig=None, axs=None, legend_loc=1, color='b',
+              title='', stim_alpha=.2, stim_color=None,
+              stim_label='Stim on', stim_style='patch', stim_offset=0*pq.s,
+              rast_ylabel='Trials', rast_size=10,
+              hist_color=None, hist_edgecolor=None,
+              hist_ylim=None,  hist_ylabel=None,
+              hist_output='counts', hist_binsize=None, hist_nbins=100,
+              hist_alpha=1.):
+    """
+    Visualize clustering on amplitude at detection point
+    Parameters
+    ----------
+    spike_train : neo.SpikeTrain
+    epoch : neo.Epoch
+    trials : list of cut neo.SpikeTrains with same number of recording channels
+    xlim : list
+        limit of x axis
+    fig : matplotlib figure
+    axs : matplotlib axes (must be 2)
+    legend_loc : 'outside' or matplotlib standard loc
+    color : color of spikes
+    title : figure title
+    stim_alpha : float
+    stim_color : str
+    stim_label : str
+    stim_style : 'patch' or 'line'
+    stim_offset : pq.Quantity
+        The amount of offset for the stimulus relative to epoch.
+    rast_ylabel : str
+    hist_color : str
+    hist_edgecolor : str
+    hist_ylim : list
+    hist_ylabel : str
+    hist_output : str
+        Accepts 'counts', 'rate' or 'mean'.
+    hist_binsize : pq.Quantity
+    hist_nbins : int
+    Returns
+    -------
+    out : fig
+    """
+    if fig is None and axs is None:
+        fig, (hist_ax, rast_ax) = plt.subplots(2, 1, sharex=True)
+    elif fig is not None and axs is None:
+        hist_ax = fig.add_subplot(2, 1, 1)
+        rast_ax = fig.add_subplot(2, 1, 2, sharex=hist_ax)
+    else:
+        assert len(axs) == 2
+        hist_ax, rast_ax = axs
+
+    if trials is None:
+        assert spike_train is not None and epoch is not None
+        t_start = xlim[0] or 0 * pq.s
+        t_stop = xlim[1] or epoch.durations[0]
+        trials = make_spiketrain_trials(epoch=epoch, t_start=t_start,
+                                        t_stop=t_stop, spike_train=spike_train)
+    else:
+        assert spike_train is None
+    dim = trials[0].times.dimensionality
+    if stim_style == 'patch':
+        if epoch is not None:
+            stim_duration = epoch.durations.rescale(dim).magnitude.max()
+        else:
+            warnings.warn('Unable to acquire stimulus duration, setting ' +
+                          'stim_style to "line". Please provede "epoch"' +
+                          ' in order to use stim_style "patch".')
+            stim_style = 'line'
+    # raster
+    plot_raster(trials, color=color, ax=rast_ax, ylabel=rast_ylabel,
+                marker_size=rast_size)
+    # histogram
+    hist_color = color if hist_color is None else hist_color
+    hist_ylabel = hist_output if hist_ylabel is None else hist_ylabel
+    plot_spike_histogram(trials, color=hist_color, ax=hist_ax,
+                         output=hist_output, binsize=hist_binsize,
+                         nbins=hist_nbins, edgecolor=hist_edgecolor,
+                         ylabel=hist_ylabel, alpha=hist_alpha)
+    if hist_ylim is not None: hist_ax.set_ylim(hist_ylim)
+    # stim representation
+    stim_color = color if stim_color is None else stim_color
+    if stim_style == 'patch':
+        fill_stop = stim_duration
+        import matplotlib.patches as mpatches
+        line = mpatches.Patch([], [], color=stim_color, label=stim_label,
+                              alpha=stim_alpha)
+    elif stim_style == 'line':
+        fill_stop = 0
+        import matplotlib.lines as mlines
+        line = mlines.Line2D([], [], color=stim_color, label=stim_label)
+    stim_offset = stim_offset.rescale(dim).magnitude
+    hist_ax.axvspan(stim_offset, fill_stop + stim_offset, color=stim_color,
+                    alpha=stim_alpha, zorder=0)
+    rast_ax.axvspan(stim_offset, fill_stop + stim_offset, color=stim_color,
+                    alpha=stim_alpha, zorder=0)
+    if legend_loc == 'outside':
+        hist_ax.legend(handles=[line], bbox_to_anchor=(0., 1.02, 1., .102),
+                       loc=4, ncol=2, borderaxespad=0.)
+    else:
+        hist_ax.legend(handles=[line], loc=legend_loc, ncol=2, borderaxespad=0.)
+    if title is not None: hist_ax.set_title(title)
+    return fig
+
+
 def plot_spike_histogram(trials, color='b', ax=None, binsize=None, bins=None,
                          output='counts', edgecolor=None, alpha=1., ylabel=None,
                          nbins=None):
