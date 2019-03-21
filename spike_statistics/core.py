@@ -1,5 +1,4 @@
 import numpy as np
-import neo
 
 
 def theta_mod_idx(sptr, binsize, time_limit):
@@ -8,6 +7,7 @@ def theta_mod_idx(sptr, binsize, time_limit):
     Parameters
     ----------
     sptr : array
+        spikes in seconds
     binsize : float
         Temporal binsize of autocorrelogram
     time_limit : flaot
@@ -48,7 +48,7 @@ def fano_factor(trials, bins=1, return_mean_var=False, return_bins=False):
 
     Note
     ----
-    This is a similar method as in [4]_, however there a sliding window was
+    This is a similar method as in [4]_, however there, a sliding window was
     used.
     .. todo::
         Sliding window calculation of the Fano factor
@@ -66,42 +66,18 @@ def fano_factor(trials, bins=1, return_mean_var=False, return_bins=False):
     >>> t2 = np.arange(0.1, .6, .1)
     >>> result = fano_factor([t1, t2], bins=3)
 
-    # array([ 0.,  0.,  0.])
+    array([ 0.,  0.,  0.])
 
     If you want to further work with the means and vars
 
     >>> result = fano_factor([t1, t2], bins=3, return_mean_var=True)
 
-    # (array([ 2.,  1.,  2.]), array([ 0.,  0.,  0.]))
+    (array([ 2.,  1.,  2.]), array([ 0.,  0.,  0.]))
 
     The fano factor is 1 for Poisson processes
 
-    >>> from elephant.spike_train_generation import homogeneous_poisson_process
-    >>> np.random.seed(12345)
-    >>> t1 = [homogeneous_poisson_process(
-    ...     10 * pq.Hz, t_start=0.0 * pq.s, t_stop=1 * pq.s) for _ in range(100)]
-    >>> result = fano_factor(t1)
-
-    # array([ 0.95394394])
-
     The Fano factor computed in bins along time can be acheived with including
-    `bins` which can be `int`
-
-    >>> ff, bins = fano_factor(t1, bins=4, return_bins=True)
-
-    # TODO fix
-    # >>> ff
-    # array([ 0.78505226,  1.16330097,  1.00901961,  0.80781457])
-    # >>> bins
-    # array([ 0.06424358,  0.29186518,  0.51948679,  0.74710839,  0.97472999])
-
-    To specify bins
-
-
-    # TODO fix
-    # >>> bins = np.arange(0, 1, .2)
-    # >>> fano_factor(t1, bins=bins)
-    # array([ 0.95941748,  1.09      ,  1.05650485,  0.72886256])
+    `bins` which can be `int` or `array`.
 
     References
     ----------
@@ -397,7 +373,7 @@ def permutation_resampling(case, control, num_samples=10000, statistic=None):
     .. plot::
         import matplotlib.pylab as plt
         import numpy as np
-        from exana.statistics import permutation_resampling
+        from spike_statistics import permutation_resampling
         case = [94, 38, 23, 197, 99, 16, 141]
         control = [52, 10, 40, 104, 51, 27, 146, 30, 46]
         pval, observed_diff, diffs = permutation_resampling(
@@ -427,97 +403,38 @@ def permutation_resampling(case, control, num_samples=10000, statistic=None):
     return pval, observed_diff, diffs
 
 
-
-def stat_test(tdict, test_func=None, nan_rule='remove', stat_key='statistic'):
-    '''
-    A very simple function to performes statistic tests between multiple groups
-    in `tdict` by given test function.
-
-    Parameters
-    ----------
-    tdict : dict
-        Dictionary where each key represents a 1D dataset of observations
-    test_func : statistic, pvalue = function(case, control)
-        Function that takes in two 1D arrays and returns desired statistic with
-        corresponding p-value.
-    nan_rule : str {'remove', None}
-        What to do with nans
-    stat_key : str
-        A textual representation of the returned statistic
-
-    Returns
-    -------
-    out : pandas.DataFrame
-        A dataframe describing statistics and pvalue.
-
-    Example
-    -------
-    >>> tdict = {'group1': [94, 38, 23, 197, 99, 16, 141],
-    ...          'group2': [52, 10, 40, 104, 51, 27, 146, 30, 46],
-    ...          'group3': [3, 10, 40, 0, 51, 27, 1, 30, 46]}
-    >>> def stat_func(a, b):
-    ...     pval, diff, _ = permutation_resampling(a, b, 10000, np.mean)
-    ...     return diff, pval
-    >>> out = stat_test(tdict, test_func=stat_func, stat_key='abs diff mean')
-    '''
-    import pandas as pd
-    if test_func is None:
-        from scipy import stats
-        test_func = lambda g1, g2: stats.ttest_ind(g1, g2, equal_var=False)
-    ps = {}
-    sts ={}
-    lib = []
-    for key1, item1 in tdict.items():
-        for key2, item2 in tdict.items():
-            if key1 != key2:
-                if set([key1, key2]) in lib:
-                    continue
-                lib.append(set([key1, key2]))
-                one = np.array(item1, dtype=np.float64)
-                two = np.array(item2, dtype=np.float64)
-                if nan_rule == 'remove':
-                    one = one[np.isfinite(one)]
-                    two = two[np.isfinite(two)]
-                elif nan_rule is None:
-                    pass
-                else:
-                    raise NotImplementedError
-                assert len(one) > 0, 'Empty list of values'
-                assert len(two) > 0, 'Empty list of values'
-                stat, p = test_func(one, two)
-                ps[key1+'--'+key2] = p
-                sts[key1+'--'+key2] = stat
-    return pd.DataFrame([ps, sts], index=['p-value', stat_key])
-
-
-def poisson_continuity_correction(n, rate):
+def poisson_continuity_correction(n, observed):
     """
-    n : Likelihood to observe n or more events
-    rate : float
+    n : array
+        Likelihood to observe n or more events
+    observed : array
         Rate of Poisson process
-
     References
     ----------
     Stark, E., & Abeles, M. (2009). Unbiased estimation of precise temporal
     correlations between spike trains. Journal of neuroscience methods, 179(1),
     90-100.
     """
+    if n.ndim == 0:
+        n = np.array([n])
+    assert n.ndim == 1
     from scipy.stats import poisson
     assert np.all(n >= 0)
-    return_arr = np.zeros(n.shape)
-    for i, n_i in enumerate(n):
+    result = np.zeros(n.shape)
+    if n.shape != observed.shape:
+        observed = np.repeat(observed, n.size)
+    for i, (n_i, rate) in enumerate(zip(n, observed)):
         if n_i == 0:
-            return_arr[i] = 1.
+            result[i] = 1.
         else:
-            rates = [poisson.pmf(j, rate) for j in range(int(n_i))]
-            return_arr[i] = 1 - np.sum(rates) - 0.5 * poisson.pmf(n_i, rate)
-    return return_arr
+            rates = [poisson.pmf(j, rate) for j in range(n_i)]
+            result[i] = 1 - np.sum(rates) - 0.5 * poisson.pmf(n_i, rate)
+    return result
 
 
 def hollow_kernel(kernlen, width, hollow_fraction=0.6, kerntype='gaussian'):
     '''
     Returns a hollow kernel normalized to it's sum
-
     Parameters
     ----------
     kernlen : int
@@ -526,7 +443,6 @@ def hollow_kernel(kernlen, width, hollow_fraction=0.6, kerntype='gaussian'):
         Width of kernel (std if gaussian)
     hollow_fraction : float
         Fractoin of the central bin to removed.
-
     Returns
     -------
     kernel : array
@@ -541,26 +457,44 @@ def hollow_kernel(kernlen, width, hollow_fraction=0.6, kerntype='gaussian'):
     return kernel / sum(kernel)
 
 
-def ccg_significance(t1, t2, binsize, limit, hollow_fraction, width,
+def cch_convolve(cch, width, hollow_fraction, kerntype):
+    import scipy.signal as scs
+    kernlen = len(cch) - 1
+    kernel = hollow_kernel(kernlen, width, hollow_fraction, kerntype)
+    # padd edges
+    len_padd = int(kernlen / 2.)
+    cch_padded = np.zeros(len(cch) + 2 * len_padd)
+    # "firstW/2 bins (excluding the very first bin) are duplicated,
+    # reversed in time, and prepended to the cch prior to convolving"
+    cch_padded[0:len_padd] = cch[1:len_padd+1][::-1]
+    cch_padded[len_padd: - len_padd] = cch
+    # # "Likewise, the lastW/2 bins aresymmetrically appended to the cch."
+    cch_padded[-len_padd:] = cch[-len_padd-1:-1][::-1]
+    # convolve cch with kernel
+    result = scs.fftconvolve(cch_padded, kernel, mode='valid')
+    assert len(cch) == len(result)
+    return result
+
+
+def cch_significance(t1, t2, binsize, limit, hollow_fraction, width,
                      kerntype='gaussian'):
     """
     Parameters
     ---------
-    t1 : np.array, or neo.SpikeTrain
+    t1 : array
         First spiketrain, raw spike times in seconds.
-    t2 : np.array, or neo.SpikeTrain
+    t2 : array
         Second spiketrain, raw spike times in seconds.
-    binsize : float, or quantities.Quantity
+    binsize : float
         Width of each bar in histogram in seconds.
-    limit : float, or quantities.Quantity
+    limit : float
         Positive and negative extent of histogram, in seconds.
     kernlen : int
         Length of kernel, must be uneven (kernlen % 2 == 1)
     width : float
         Width of kernel (std if gaussian)
     hollow_fraction : float
-        Fractoin of the central bin to removed.
-
+        Fraction of the central bin to removed.
     References
     ----------
     Stark, E., & Abeles, M. (2009). Unbiased estimation of precise temporal
@@ -569,41 +503,66 @@ def ccg_significance(t1, t2, binsize, limit, hollow_fraction, width,
     English et al. 2017, Neuron, Pyramidal Cell-Interneuron Circuit Architecture
     and Dynamics in Hippocampal Networks
     """
-    import scipy.signal as scs
-    ccg, bins = correlogram(t1, t2, binsize=binsize, limit=limit,
+    cch, bins = correlogram(t1, t2, binsize=binsize, limit=limit,
                             density=False)
-    kernlen = len(ccg) - 1
-    kernel = hollow_kernel(kernlen, width, hollow_fraction, kerntype)
-    # padd edges
-    len_padd = int(kernlen / 2.)
-    ccg_padded = np.zeros(len(ccg) + 2 * len_padd)
-    # "firstW/2 bins (excluding the very first bin) are duplicated,
-    # reversed in time, and prepended to the ccg prior to convolving"
-    ccg_padded[0:len_padd] = ccg[1:len_padd+1][::-1]
-    ccg_padded[len_padd: - len_padd] = ccg
-    # # "Likewise, the lastW/2 bins aresymmetrically appended to the ccg."
-    ccg_padded[-len_padd:] = ccg[-len_padd-1:-1][::-1]
-    # convolve ccg with kernel
-    ccg_smoothed = scs.fftconvolve(ccg_padded, kernel, mode='valid')
-    pfast = np.zeros(ccg.shape)
-    assert len(ccg) == len(ccg_smoothed)
-    for m, (val_m, rate_m) in enumerate(zip(ccg, ccg_smoothed)):
-        pfast[m] = poisson_continuity_correction(np.array([val_m]), rate_m)
-    # pcausal describes the probability of obtaining a peak on one side
+    pfast = np.zeros(cch.shape)
+    cch_smooth = cch_convolve(cch=cch, width=width,
+                              hollow_fraction=hollow_fraction,
+                              kerntype=kerntype)
+    pfast = poisson_continuity_correction(cch, cch_smooth)
+    # ppeak describes the probability of obtaining a peak with positive lag
     # of the histogram, that is signficantly larger than the largest peak
-    # in the anticausal direction. we leave the zero peak empty
-    pcausal = np.zeros(ccg.shape)
-    ccg_half_len = int(np.floor(len(ccg) / 2.))
-    max_pre = np.max(ccg[:ccg_half_len])
-    max_post = np.max(ccg[ccg_half_len:])
-    for m, val_m in enumerate(ccg):
-        if m < ccg_half_len:
-            pcausal[m] = poisson_continuity_correction(
-                np.array([val_m]), max_post)
-        if m > ccg_half_len:
-            pcausal[m] = poisson_continuity_correction(
-                np.array([val_m]), max_pre)
-    return pcausal, pfast, bins, ccg, ccg_smoothed
+    # in the negative lag direction.
+    ppeak = np.zeros(cch.shape)
+    max_vals = np.zeros(cch.shape)
+    cch_half_len = int(np.floor(len(cch) / 2.))
+    max_vals[cch_half_len:] = np.max(cch[:cch_half_len])
+    max_vals[:cch_half_len] = np.max(cch[cch_half_len:])
+    ppeak = poisson_continuity_correction(cch, max_vals)
+    return ppeak, pfast, bins, cch, cch_smooth
+
+
+def transfer_probability(t1, t2, binsize, limit, hollow_fraction, width,
+                         latency, winsize, kerntype='gaussian'):
+    """
+    Parameters
+    ---------
+    t1 : array
+        First spiketrain, raw spike times in seconds.
+    t2 : array
+        Second spiketrain, raw spike times in seconds.
+    binsize : float
+        Width of each bar in histogram in seconds.
+    limit : float
+        Positive and negative extent of histogram, in seconds.
+    kernlen : int
+        Length of kernel, must be uneven (kernlen % 2 == 1)
+    width : float
+        Width of kernel (std if gaussian)
+    hollow_fraction : float
+        Fraction of the central bin to removed.
+    References
+    ----------
+    English et al. 2017, Neuron, Pyramidal Cell-Interneuron Circuit Architecture
+    and Dynamics in Hippocampal Networks
+    """
+    cch, bins = correlogram(t1, t2, binsize=binsize, limit=limit,
+                            density=False)
+    cch_s = cch_convolve(cch=cch, width=width,
+                              hollow_fraction=hollow_fraction,
+                              kerntype=kerntype)
+
+    mask = (bins >= latency) & (bins <= latency + winsize)
+    cmax = np.max(cch[mask])
+    idx, = np.where(cch==cmax * mask)
+    idx = idx if len(idx) == 1 else idx[0]
+    pfast, = poisson_continuity_correction(cmax, cch_s[idx])
+    cch_half_len = int(np.floor(len(cch) / 2.))
+    max_pre = np.max(cch[:cch_half_len])
+    ppeak, = poisson_continuity_correction(cmax, max_pre)
+    ptime = float(bins[idx])
+    trans_prob = sum(cch[mask] - cch_s[mask]) / len(t1)
+    return trans_prob, ppeak, pfast, ptime, cmax
 
 
 def correlogram(t1, t2=None, binsize=.001, limit=.02, auto=False,
@@ -617,13 +576,13 @@ def correlogram(t1, t2=None, binsize=.001, limit=.02, auto=False,
 
     Parameters
     ---------
-    t1 : np.array, or neo.SpikeTrain
+    t1 : np.array
         First spiketrain, raw spike times in seconds.
-    t2 : np.array, or neo.SpikeTrain
+    t2 : np.array
         Second spiketrain, raw spike times in seconds.
-    binsize : float, or quantities.Quantity
+    binsize : float
         Width of each bar in histogram in seconds.
-    limit : float, or quantities.Quantity
+    limit : float
         Positive and negative extent of histogram, in seconds.
     auto : bool
         If True, then returns autocorrelogram of `t1` and in
