@@ -1,9 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import quantities as pq
-import neo
-import warnings
-from utils import simpleaxis
 
 
 def plot_raster(trials, color="#3498db", lw=1, ax=None, marker='.', marker_size=10,
