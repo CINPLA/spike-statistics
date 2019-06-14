@@ -414,6 +414,9 @@ def poisson_continuity_correction(n, observed):
     Stark, E., & Abeles, M. (2009). Unbiased estimation of precise temporal
     correlations between spike trains. Journal of neuroscience methods, 179(1),
     90-100.
+    Authors
+    -------
+    Tristan Stoeber, Mikkel Lepperød
     """
     if n.ndim == 0:
         n = np.array([n])
@@ -446,6 +449,9 @@ def hollow_kernel(kernlen, width, hollow_fraction=0.6, kerntype='gaussian'):
     Returns
     -------
     kernel : array
+    Authors
+    -------
+    Tristan Stoeber, Mikkel Lepperød
     '''
     if kerntype == 'gaussian':
         from scipy.signal import gaussian
@@ -502,6 +508,9 @@ def cch_significance(t1, t2, binsize, limit, hollow_fraction, width,
     90-100.
     English et al. 2017, Neuron, Pyramidal Cell-Interneuron Circuit Architecture
     and Dynamics in Hippocampal Networks
+    Authors
+    -------
+    Tristan Stoeber, Mikkel Lepperød
     """
     cch, bins = correlogram(t1, t2, binsize=binsize, limit=limit,
                             density=False)
@@ -545,6 +554,9 @@ def transfer_probability(t1, t2, binsize, limit, hollow_fraction, width,
     ----------
     English et al. 2017, Neuron, Pyramidal Cell-Interneuron Circuit Architecture
     and Dynamics in Hippocampal Networks
+    Authors
+    -------
+    Tristan Stoeber, Mikkel Lepperød
     """
     cch, bins = correlogram(t1, t2, binsize=binsize, limit=limit,
                             density=False)

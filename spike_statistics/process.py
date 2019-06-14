@@ -15,6 +15,9 @@ def nonstationary_poisson(times, rate):
     -------
     events : array
         time points from a poisson process which rate varies according to rate.
+    Authors
+    -------
+    Alex Stasik, Mikkel Lepperød
     """
     n_exp = rate.max() * (times.max()-times.min())
     t_events = np.sort(
