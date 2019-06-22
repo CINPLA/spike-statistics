@@ -685,3 +685,61 @@ def correlogram(t1, t2=None, binsize=.001, limit=.02, auto=False,
         count = count[::-1]
 
     return count, bins[1:]
+
+
+def hist_stim(stim_times, source, target, winsize, latency):
+    """Makes binary classification of response in windows"""
+    src = np.searchsorted
+    result = {
+        'stim_response': (
+            # stim response
+            src(source, stim_times, 'left') <
+            src(source, stim_times + winsize, 'right')),
+        'syn_response': (
+            # stim synaptic response
+            src(target, stim_times + latency, 'left') <
+            src(target, stim_times + latency + winsize, 'right'))
+    }
+    return result
+
+
+def causal_connectivity(source, target, stim_times, winsize, latency):
+        '''
+        Parameters
+        ----------
+        source : array
+            putative sender neuron
+        target : array
+            putative receiver neuron
+        stim_times : array
+            stimulation times
+        winsize : float
+            size of window around PSTH
+        latency : float
+            time untill response of post-synaptic neuron (begining of PSTH peak)
+
+        Examples
+        --------
+        import numpy as np
+        sptr1 = np.random.random(1000) * 10
+        sptr2 = np.random.random(1000) * 10
+        # stimulate every second (without response)
+        stim = np.arange(0, 10, 1)
+        # we expect the stimulation response to last 0.1 s
+        winsize = .1
+        # we expect a post-synaptic response in sptr2 after 0.1 s after stimulation
+        latency = .1
+        conn = causal_connectivity(sptr1, sptr2, stim, .1, 0)
+        References
+        ----------
+        Lepperød et al., Inferring causal connectivity using pairwise recordings
+        and optogenetics, 2019
+        '''
+        responses = hist_stim(
+            stim_times, source, target, winsize, latency)
+        z0 = responses['stim_response'] * responses['nostim_response'] == 0
+        z1 = z0 == False
+
+        y1 = responses['syn_response'][z1]
+        y0 = responses['syn_response'][z0]
+        return y1.mean() - y0.mean()
