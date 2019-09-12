@@ -388,18 +388,17 @@ def permutation_resampling(case, control, num_samples=10000, statistic=None):
     """
     statistic = statistic or np.mean
 
-    observed_diff = abs(statistic(case) - statistic(control))
+    observed_diff = np.abs(statistic(case) - statistic(control))
     num_case = len(case)
 
     combined = np.concatenate([case, control])
     diffs = []
     for i in range(num_samples):
         xs = np.random.permutation(combined)
-        diff = np.mean(xs[:num_case]) - np.mean(xs[num_case:])
+        diff = np.abs(statistic(xs[:num_case]) - statistic(xs[num_case:]))
         diffs.append(diff)
 
-    pval = (np.sum(diffs > observed_diff) +
-            np.sum(diffs < -observed_diff))/float(num_samples)
+    pval = np.sum(diffs > observed_diff) / float(num_samples)
     return pval, observed_diff, diffs
 
 
