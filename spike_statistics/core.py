@@ -233,7 +233,7 @@ def coeff_var(trials):
     return cvs
 
 
-def bootstrap(data, num_samples=10000, statistic=None, alpha=0.05):
+def bootstrap_ci(data, num_samples=10000, statistic=None, alpha=0.05):
     """
     Returns bootstrap estimate of 100.0*(1-alpha) CI for statistic.
     Adapted from http://people.duke.edu/~ccc14/pcfb/analysis.html
@@ -318,7 +318,59 @@ def bootstrap(data, num_samples=10000, statistic=None, alpha=0.05):
             stat[int((1 - alpha / 2.0) * num_samples)])
 
 
-def permutation_resampling(case, control, num_samples=10000, statistic=None):
+def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic=None):
+    '''
+    Parameters
+    ----------
+    data : 2D list (list of lists/arrays)
+        list(block(data)) first dimension or topmost lists are the blocks which
+        each contains samples
+    n_boots : int
+        Number of bootstrap samples
+    n_blocks : int (alternative)
+        number of random blocks used, default to len(data)
+    n_samples : int (alternative)
+        number of subsamples drawn from each block, default to min(len(d) for d in data)
+    statistic : function (alternative)
+        statistic to apply on each drawn sample, defaults to None thus returning
+        the samples
+    Examples
+    --------
+    >>> import numpy as np
+    >>> np.random.seed(12345)
+    >>> data = [np.random.normal(3, 1, 10), np.random.normal(4, 1, 50)]
+    >>> data_conc = np.concatenate(data)
+    >>> imbalanced_mean = np.mean(data_conc)
+    >>> boot_data = block_bootstrap(data, n_boots=10000)
+    >>> boot_mean = np.mean(boot_data)
+    >>> data_w = np.concatenate([np.ones_like(a) / len(a) for a in data])
+    >>> weighted_mean = np.average(data_conc, weights=data_w)
+    >>> print(imbalanced_mean, boot_mean, weighted_mean)
+    Note
+    ----
+    The bootstrapped distribution can be used for further statistical testing
+    Returns
+    -------
+    boot_samples : list
+        the drawn samples if statistic is None, else statistic of samples
+    '''
+    n_blocks = len(data) if n_blocks is None else n_blocks
+    n_samples = min([len(v) for v in data]) if n_samples is None else n_samples
+    boot_samples = []
+    for _ in np.arange(n_boots):
+        samples = []
+        random_blocks = np.random.choice(data, n_blocks, replace=True)
+        for random_block in random_blocks:
+            random_samples = np.random.choice(random_block, n_samples, replace=True)
+            samples.append(random_samples)
+        if statistic is None:
+            boot_samples.append(samples)
+        else:
+            boot_samples.append(statistic(samples))
+    return boot_samples
+
+
+def permutation_resampling_test(case, control, num_samples=10000, statistic=None):
     """
     Simulation-based statistical calculation of p-value that statistic for case
     is different from statistic for control under the null hypothesis that the
@@ -386,6 +438,9 @@ def permutation_resampling(case, control, num_samples=10000, statistic=None):
         plt.legend()
         plt.show()
     """
+    if np.ndim(case) != 1 or np.ndim(control) != 1:
+        raise ValueError('Data must be 1 dimensional.')
+
     statistic = statistic or np.mean
 
     observed_diff = abs(statistic(case) - statistic(control))
@@ -395,12 +450,53 @@ def permutation_resampling(case, control, num_samples=10000, statistic=None):
     diffs = []
     for i in range(num_samples):
         xs = np.random.permutation(combined)
-        diff = np.mean(xs[:num_case]) - np.mean(xs[num_case:])
+        diff = statistic(xs[:num_case]) - statistic(xs[num_case:])
         diffs.append(diff)
 
     pval = (np.sum(diffs > observed_diff) +
-            np.sum(diffs < -observed_diff))/float(num_samples)
+            np.sum(diffs < -observed_diff)) / float(num_samples)
     return pval, observed_diff, diffs
+
+
+def compute_direct_prob(sample1, sample2):
+    '''
+    get_direct_prob Returns the direct probability of items from sample2 being
+    greater than or equal to those from sample1.
+       Sample1 and Sample2 are two bootstrapped samples and this function
+       directly computes the probability of items from sample 2 being greater
+       than or equal to those from sample1. Since the bootstrapped samples are
+       themselves posterior distributions, this is a way of computing a
+       Bayesian probability. The joint matrix can also be returned to compute
+       directly upon.
+    Adapted from https://www.biorxiv.org/content/10.1101/819334v1
+    '''
+    joint_low_val = min([min(sample1), min(sample2)])
+    joint_high_val = max([max(sample1), max(sample2)])
+
+    p_joint_matrix = np.zeros((100, 100))
+    p_axis = np.linspace(joint_low_val, joint_high_val, num=100)
+    edge_shift = (p_axis[2] - p_axis[1]) / 2
+    p_axis_edges = p_axis - edge_shift
+    p_axis_edges = np.append(p_axis_edges, (joint_high_val + edge_shift))
+
+    #Calculate probabilities using histcounts for edges.
+
+    p_sample1 = np.histogram(sample1, bins=p_axis_edges)[0] / np.size(sample1)
+    p_sample2 = np.histogram(sample2, bins=p_axis_edges)[0] / np.size(sample2)
+
+    #Now, calculate the joint probability matrix:
+
+    for i in np.arange(np.shape(p_joint_matrix)[0]):
+        for j in np.arange(np.shape(p_joint_matrix)[1]):
+            p_joint_matrix[i,j] = p_sample1[i] * p_sample2[j]
+
+    #Normalize the joint probability matrix:
+    p_joint_matrix = p_joint_matrix / np.sum(p_joint_matrix)
+
+    #Get the volume of the joint probability matrix in the upper triangle:
+    p_test = np.sum(np.triu(p_joint_matrix))
+
+    return p_test, p_joint_matrix
 
 
 def poisson_continuity_correction(n, observed):
