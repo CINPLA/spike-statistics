@@ -450,10 +450,12 @@ def permutation_resampling_test(case, control, num_samples=10000, statistic=None
     diffs = []
     for i in range(num_samples):
         xs = np.random.permutation(combined)
-        diff = np.abs(statistic(xs[:num_case]) - statistic(xs[num_case:]))
+        diff = statistic(xs[:num_case]) - statistic(xs[num_case:])
         diffs.append(diff)
 
-    pval = np.sum(diffs > observed_diff) / float(num_samples)
+    pval = (
+        np.sum(diffs > observed_diff) +
+        np.sum(diffs < -observed_diff)) / float(num_samples)
     return pval, observed_diff, diffs
 
 
