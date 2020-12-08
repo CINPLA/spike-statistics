@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def theta_mod_idx(sptr, binsize, time_limit):
+def theta_mod_idx(sptr, binsize=0.01, time_limit=0.2):
     '''Theta modulation index as defined in [3]_
 
     Parameters
@@ -22,8 +22,8 @@ def theta_mod_idx(sptr, binsize, time_limit):
 
     count, bins = correlogram(
         t1=sptr, t2=None, binsize=binsize, limit=time_limit,  auto=True)
-    th = count[(bins[:-1] >= .05) & (bins[:-1] <= .07)].mean()
-    pk = count[(bins[:-1] >= .1) & (bins[:-1] <= .14)].mean()
+    th = count[(bins >= .05) & (bins <= .07)].mean()
+    pk = count[(bins >= .1) & (bins <= .14)].mean()
     return (pk - th)/(pk + th)
 
 
