@@ -359,10 +359,12 @@ def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic
     boot_samples = []
     for _ in np.arange(n_boots):
         samples = []
-        random_blocks = np.random.choice(data, n_blocks, replace=True)
-        for random_block in random_blocks:
-            random_samples = np.random.choice(random_block, n_samples, replace=True)
-            samples.append(random_samples)
+        # could use random.choice, but it sometimes reads lists of lists
+        # as multidimensional arrays
+        block_idxs = np.random.randint(0, len(data), n_blocks)
+        for random_bloc in data[block_idxs]:
+            sample_idxs = np.random.randint(0, len(random_block), n_samples)
+            samples.append(random_bloc[sample_idxs])
         if statistic is None:
             boot_samples.append(samples)
         else:
