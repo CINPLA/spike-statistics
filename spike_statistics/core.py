@@ -354,7 +354,7 @@ def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic
     boot_samples : list
         the drawn samples if statistic is None, else statistic of samples
     '''
-    assert isinstance(data, np.array)
+    assert isinstance(data, np.ndarray)
     n_blocks = len(data) if n_blocks is None else n_blocks
     n_samples = min([len(v) for v in data]) if n_samples is None else n_samples
     boot_samples = []
