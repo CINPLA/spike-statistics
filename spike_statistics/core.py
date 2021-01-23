@@ -322,9 +322,9 @@ def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic
     '''
     Parameters
     ----------
-    data : 2D list (list of lists/arrays)
-        list(block(data)) first dimension or topmost lists are the blocks which
-        each contains samples
+    data : array of arrays
+        array of blocks which each contains samples e.g.
+        array(array(sample_1_1, sample_1_2, ...), array(sample_2_1, ...), ...)
     n_boots : int
         Number of bootstrap samples
     n_blocks : int (alternative)
@@ -354,6 +354,7 @@ def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic
     boot_samples : list
         the drawn samples if statistic is None, else statistic of samples
     '''
+    assert isinstance(data, np.array)
     n_blocks = len(data) if n_blocks is None else n_blocks
     n_samples = min([len(v) for v in data]) if n_samples is None else n_samples
     boot_samples = []
@@ -362,9 +363,9 @@ def block_bootstrap(data, n_boots=1000, n_blocks=None, n_samples=None, statistic
         # could use random.choice, but it sometimes reads lists of lists
         # as multidimensional arrays
         block_idxs = np.random.randint(0, len(data), n_blocks)
-        for random_bloc in data[block_idxs]:
+        for random_block in data[block_idxs]:
             sample_idxs = np.random.randint(0, len(random_block), n_samples)
-            samples.append(random_bloc[sample_idxs])
+            samples.append(random_block[sample_idxs])
         if statistic is None:
             boot_samples.append(samples)
         else:
